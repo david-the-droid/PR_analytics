@@ -1,27 +1,42 @@
-name: "PR Analytics"
+name: Monthly issue metrics
 on:
   workflow_dispatch:
-    inputs:
-      report_date_start:
-        description: "Report date start(29/07/2024)"
-        required: false
-      report_date_end:
-        description: "Report date end(29/07/2024)"
-        required: false
+  schedule:
+    - cron: '3 2 1 * *'
+
+permissions:
+  contents: read
+
 jobs:
-  create-report:
-    name: "Create report"
+  build:
+    name: issue metrics
     runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      pull-requests: read
     steps:
-      - name: "Run script for analytics"
-        uses: AlexSim93/pull-request-analytics-action@v3
-        with:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITHUB_REPO_FOR_ISSUE: "PR_analytics"
-          GITHUB_OWNER_FOR_ISSUE: "david-the-droid"
-          GITHUB_OWNERS_REPOS: "david-the-droid/PR_analytics"
-          CORE_HOURS_START: "9:00"
-          CORE_HOURS_END: "19:00"
-          TIMEZONE: "Europe/Berlin"
-          REPORT_DATE_START: ${{ inputs.report_date_start }}
-          REPORT_DATE_END: ${{ inputs.report_date_end }}
+    - name: Get dates for last month
+      shell: bash
+      run: |
+        # Calculate the first day of the previous month
+        first_day=$(date -d "last month" +%Y-%m-01)
+
+        # Calculate the last day of the previous month
+        last_day=$(date -d "$first_day +1 month -1 day" +%Y-%m-%d)
+
+        #Set an environment variable with the date range
+        echo "$first_day..$last_day"
+        echo "last_month=$first_day..$last_day" >> "$GITHUB_ENV"
+
+    - name: Run issue-metrics tool
+      uses: github/issue-metrics@v3
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        SEARCH_QUERY: 'repo:owner/repo is:issue created:${{ env.last_month }} -reason:"not planned"'
+
+    - name: Create issue
+      uses: peter-evans/create-issue-from-file@v5
+      with:
+        title: Monthly issue metrics report
+        token: ${{ secrets.GITHUB_TOKEN }}
+        content-filepath: ./issue_metrics.md
